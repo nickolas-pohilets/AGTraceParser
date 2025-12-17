@@ -8,7 +8,8 @@ To record a trace:
 * Set breakpoint in ``AttributeGraph`AGGraphCreateShared``
 * Step into `AG::Graph::Graph()` -> `AG::Graph::Graph()::$_1::operator()() const` -> `AG::DebugServer::start`
 * Override value returned by `os_variant_has_internal_diagnostics()`
-* Use [`DebugClient`](https://github.com/nickolas-pohilets/AGDebugKit/tree/main/Sources/DebugClient) to send debugging commands:
+* Debug Server URL will be printed in the app's console, e.g. `debug server graph://127.0.0.1:55030/?token=3067380191` 
+* Connect [`DebugClient`](https://github.com/nickolas-pohilets/AGDebugKit/tree/main/Sources/DebugClient) to the Debug Server and send the following debugging commands:
     * `tracing/start`
     * `tracing/stop`
     * `tracing/sync`
