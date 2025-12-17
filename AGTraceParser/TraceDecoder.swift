@@ -28,9 +28,9 @@ struct TraceDecoder {
             } else if sep == 0x3a {
                 try child.decodeTree()
             } else if sep == 0x1a {
-                try child.decodeTypes()
+                try child.decodeType()
             } else if sep == 0x22 {
-                try child.decodeKeys()
+                try child.decodeKey()
             } else {
                 child.skipTillEnd("Unknown top-level record type 0x\(sep, hexWidth: 2) @\(pos)")
             }
@@ -329,14 +329,23 @@ struct TraceDecoder {
         skipTillEnd("tree")
     }
     
-    mutating func decodeTypes() throws(TraceDecoderError) {
-        skipTillEnd("types")
+    mutating func decodeType() throws(TraceDecoderError) {
+        let a = try decodeVariantIfPresent(tag: 0x08)
+        let b = try decodeStringIfPresent(tag: 0x12)
+        let c = try decodeStringIfPresent(tag: 0x1a)
+        let d = try decodeVariantIfPresent(tag: 0x20)
+        let e = try decodeVariantIfPresent(tag: 0x28)
+        let f = try decodeVariantIfPresent(tag: 0x30)
+        print("type: \(a as Any), \(b as Any), \(c as Any), \(d as Any), \(e as Any), \(f as Any)")
     }
     
-    mutating func decodeKeys() throws(TraceDecoderError) {
-        skipTillEnd("keys")
+    mutating func decodeKey() throws(TraceDecoderError) {
+        let x = try decodeVariantIfPresent(tag: 0x8) ?? 0
+        let y = try decodeStringIfPresent(tag: 0x12)
+        try assertAtEnd()
+        print("key: \(x as Any) \(y as Any)")
     }
-    
+        
     mutating func decodeFieldTimestamp() throws(TraceDecoderError) -> Date {
         let magic11 = try decodeVariant()
         if magic11 != 0x11 {
@@ -364,6 +373,24 @@ struct TraceDecoder {
             return try decodeVariantImpl()
         }
         return nil
+    }
+    
+    private mutating func decodeDataIfPresent(tag: UInt) throws(TraceDecoderError) -> Data? {
+        if try peekVariant() == tag {
+            self.peekedVariant = nil
+            return try decodeLengthDelimited()
+        }
+        return nil
+    }
+    
+    private mutating func decodeStringIfPresent(tag: UInt) throws(TraceDecoderError) -> String? {
+        guard let data = try decodeDataIfPresent(tag: tag) else {
+            return nil
+        }
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw .invalidFormat("Failed to decode string from data")
+        }
+        return text
     }
 
     private mutating func decodeVariant() throws(TraceDecoderError) -> UInt {
