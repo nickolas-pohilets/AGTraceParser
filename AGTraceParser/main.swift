@@ -10,7 +10,7 @@ import Foundation
 func main()  {
     do {
         let data = try Data(contentsOf: URL(filePath: "/Users/npohilets/Desktop/trace-0001.ag-trace"))
-        var traceDecoder = TraceDecoder(decoder: Decoder(data: data))
+        var traceDecoder = TraceDecoder(data: data)
         try traceDecoder.decodeAll()
         print("Done!")
     } catch {

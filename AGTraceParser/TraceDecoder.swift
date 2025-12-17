@@ -11,16 +11,39 @@ enum TraceDecoderError: Error {
     case eof
 }
 
+class ImageInfo {
+    let uuid: UUID
+    let path: String
+    let baseAddress: UInt
+    let size: UInt
+    
+    init(uuid: UUID, path: String, baseAddress: UInt, size: UInt) {
+        self.uuid = uuid
+        self.path = path
+        self.baseAddress = baseAddress
+        self.size = size
+    }
+}
+
+struct StackFrame {
+    var image: ImageInfo
+    var offset: UInt
+}
+
 struct TraceDecoder {
     var decoder: Decoder
     var peekedVariant: UInt? = nil
+    
+    init(data: Data) {
+        self.decoder = Decoder(data: data)
+        self.peekedVariant = nil
+    }
     
     mutating func decodeAll() throws(TraceDecoderError) {
         while !decoder.isAtEnd {
             let pos = decoder.position
             let sep = try self.decodeVariant()
-            let chunk = try decodeLengthDelimited()
-            var child = TraceDecoder(decoder: Decoder(data: chunk))
+            var child = try decodeChild()
             if sep == 0x0A {
                 try child.decodeRecord()
             } else if sep == 0x12 {
@@ -356,41 +379,98 @@ struct TraceDecoder {
     }
     
     mutating func decodeFieldBackTrace(param: UInt) throws(TraceDecoderError) {
-        if decoder.isAtEnd {
-            return
+        let tag = 2+8*param
+        var images: [ImageInfo] = []
+        var frames: [StackFrame] = []
+        while true {
+            let v = try peekVariant()
+            if v != tag {
+                break
+            }
+            self.peekedVariant = nil
+            var child = try decodeChild()
+            let frame = try child.decodeStackFrame(images: &images)
+            frames.append(frame)
         }
-        let tag = try decodeVariant()
-        let expectedTag = 2+8*param
-        if tag != expectedTag {
-            throw .invalidFormat("Unexpected leading tag for field backtrace: \(tag) vs \(expectedTag)")
+    }
+    
+    mutating func decodeStackFrame(images: inout [ImageInfo]) throws(TraceDecoderError) -> StackFrame {
+        if let image = try decodeImageIfPresent() {
+            print("image: #\(images.count) \(image.uuid) \(image.baseAddress, hexWidth: 16)..<\(image.baseAddress + image.size, hexWidth: 16) \(image.path)")
+            images.append(image)
         }
-        skipTillEnd("field_backtrace")
+        let index = try decodeVariantIfPresent(tag: 0x8) ?? 0
+        let offset = try decodeVariantIfPresent(tag: 0x10) ?? 0
+        try assertAtEnd()
+        
+        if index >= images.count {
+            throw .invalidFormat("Stack frame refers to image not seen before")
+        }
+        
+        let image = images[Int(index)]
+        let frame = StackFrame(image: image, offset: offset)
+        print("symbol: #\(index) \(offset, hexWidth: 16)")
+        return frame
+    }
+    
+    mutating func decodeImageIfPresent() throws(TraceDecoderError) -> ImageInfo? {
+        try decodeIfPresent(tag: 0x1a) { (d: inout TraceDecoder) throws(TraceDecoderError) -> ImageInfo in
+            var child = try d.decodeChild()
+            return try child.decodeImage()
+        }
+    }
+    
+    mutating func decodeImage() throws(TraceDecoderError) -> ImageInfo {
+        guard let uuid = try decodeUUIDIfPresent(tag: 0x0a) else {
+            throw .invalidFormat("UUID is required in ImageInfo")
+        }
+        let path = try decodeStringIfPresent(tag: 0x12) ?? ""
+        let baseAddr = try decodeVariantIfPresent(tag: 0x18) ?? 0
+        let size = try decodeVariantIfPresent(tag: 0x20) ?? 0
+        return ImageInfo(uuid: uuid, path: path, baseAddress: baseAddr, size: size)
+    }
+    
+    mutating func decodeUUIDIfPresent(tag: UInt) throws(TraceDecoderError) -> UUID? {
+        try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(TraceDecoderError) -> UUID in
+            try d.decodeUUID()
+        }
+    }
+    
+    mutating func decodeUUID() throws(TraceDecoderError) -> UUID {
+        let text = try decodeString()
+        guard let UUID = UUID(uuidString: text) else {
+            throw .invalidFormat("Invalid UUID format: \(text)")
+        }
+        return UUID
+    }
+    
+    private mutating func decodeIfPresent<T>(
+        tag: UInt,
+        block: (inout TraceDecoder) throws(TraceDecoderError) -> T
+    ) throws(TraceDecoderError) -> T? {
+        if try peekVariant() == tag {
+            self.peekedVariant = nil
+            return try block(&self)
+        }
+        return nil
     }
     
     private mutating func decodeVariantIfPresent(tag: UInt) throws(TraceDecoderError) -> UInt? {
-        if try peekVariant() == tag {
-            self.peekedVariant = nil
-            return try decodeVariantImpl()
+        return try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(TraceDecoderError) -> UInt in
+            try d.decodeVariantImpl()
         }
-        return nil
     }
     
     private mutating func decodeDataIfPresent(tag: UInt) throws(TraceDecoderError) -> Data? {
-        if try peekVariant() == tag {
-            self.peekedVariant = nil
-            return try decodeLengthDelimited()
+        return try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(TraceDecoderError) -> Data in
+            try d.decodeLengthDelimited()
         }
-        return nil
     }
     
     private mutating func decodeStringIfPresent(tag: UInt) throws(TraceDecoderError) -> String? {
-        guard let data = try decodeDataIfPresent(tag: tag) else {
-            return nil
+        return try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(TraceDecoderError) -> String in
+            try d.decodeString()
         }
-        guard let text = String(data: data, encoding: .utf8) else {
-            throw .invalidFormat("Failed to decode string from data")
-        }
-        return text
     }
 
     private mutating func decodeVariant() throws(TraceDecoderError) -> UInt {
@@ -424,6 +504,19 @@ struct TraceDecoder {
         }
     }
     
+    private mutating func decodeString() throws(TraceDecoderError) -> String {
+        let data = try decodeLengthDelimited()
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw .invalidFormat("Failed to decode string from data")
+        }
+        return text
+    }
+    
+    private mutating func decodeChild() throws(TraceDecoderError) -> TraceDecoder {
+        let data = try decodeLengthDelimited()
+        return TraceDecoder(data: data)
+    }
+        
     private func mappingError<T>( _ block: () throws(DecoderError) -> T) throws(TraceDecoderError) -> T {
         do {
             return try block()
