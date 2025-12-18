@@ -20,6 +20,8 @@
 
 /* Begin PBXFileReference section */
 		4A97C3512EF1D86100B8D442 /* AGTraceParser */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = AGTraceParser; sourceTree = BUILT_PRODUCTS_DIR; };
+		4ABA95342EF42B78004F7934 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
+		4ABA95352EF42B78004F7934 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -45,6 +47,8 @@
 			isa = PBXGroup;
 			children = (
 				4A97C3532EF1D86100B8D442 /* AGTraceParser */,
+				4ABA95342EF42B78004F7934 /* LICENSE */,
+				4ABA95352EF42B78004F7934 /* README.md */,
 				4A97C3522EF1D86100B8D442 /* Products */,
 			);
 			sourceTree = "<group>";
