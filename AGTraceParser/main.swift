@@ -9,10 +9,9 @@ import Foundation
 
 func main()  {
     do {
-        let data = try Data(contentsOf: URL(filePath: "/Users/npohilets/Desktop/trace-0001.ag-trace"))
+        let data = try Data(contentsOf: URL(filePath: CommandLine.arguments[1]))
         var traceDecoder = TraceDecoder(data: data)
         try traceDecoder.decodeAll()
-        print("Done!")
     } catch {
         print(error)
     }
