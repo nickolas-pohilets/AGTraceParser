@@ -31,17 +31,20 @@ struct StackFrame {
 }
 
 struct TraceDecoder {
+    typealias E = TraceDecoderError
+    
     var decoder: Decoder
-    var peekedVariant: UInt? = nil
+    var peekedTag: UInt? = nil
     
     init(data: Data) {
         self.decoder = Decoder(data: data)
-        self.peekedVariant = nil
+        self.peekedTag = nil
     }
     
-    mutating func decodeAll() throws(TraceDecoderError) {
+    mutating func decodeAll() throws(E) {
         while !decoder.isAtEnd {
             let pos = decoder.position
+            print("@\(pos, hexWidth: 6)")
             let sep = try self.decodeVariant()
             var child = try decodeChild()
             if sep == 0x0A {
@@ -61,7 +64,7 @@ struct TraceDecoder {
         print("Done!")
     }
     
-    mutating func decodeRecord() throws(TraceDecoderError) {
+    mutating func decodeRecord() throws(E) {
         let magic08 = try decodeVariant()
         if magic08 != 0x08 {
             print("Unexpected record magic: \(magic08, hexWidth: 2))")
@@ -158,175 +161,175 @@ struct TraceDecoder {
         }
     }
     
-    mutating func decodeBeginTrace() throws(TraceDecoderError) {
+    mutating func decodeBeginTrace() throws(E) {
         try decodeEvent("begin_trace", hasTimestampt: true, numArgs: 0)
     }
     
-    mutating func decodeEndTrace() throws(TraceDecoderError) {
+    mutating func decodeEndTrace() throws(E) {
         try decodeEvent("end_trace", hasTimestampt: true, numArgs: 0)
     }
     
-    mutating func decodeBeginUpdateSubgraph() throws(TraceDecoderError) {
+    mutating func decodeBeginUpdateSubgraph() throws(E) {
         try decodeEvent("begin_update_subgraph", numArgs: 2)
     }
     
-    mutating func decodeEndUpdateSubgraph() throws(TraceDecoderError) {
+    mutating func decodeEndUpdateSubgraph() throws(E) {
         try decodeEvent("end_update_subgraph", numArgs: 1)
     }
     
-    mutating func decodeBeginUpdateStack() throws(TraceDecoderError) {
+    mutating func decodeBeginUpdateStack() throws(E) {
         try decodeEvent("begin_update_stack", numArgs: 2)
     }
     
-    mutating func decodeEndUpdateStack() throws(TraceDecoderError) {
+    mutating func decodeEndUpdateStack() throws(E) {
         try decodeEvent("end_update_stack", numArgs: 2)
     }
     
-    mutating func decodeBeginUpdateNode() throws(TraceDecoderError) {
+    mutating func decodeBeginUpdateNode() throws(E) {
         try decodeEvent("begin_update_node", numArgs: 1)
     }
     
-    mutating func decodeEndUpdateNode() throws(TraceDecoderError) {
+    mutating func decodeEndUpdateNode() throws(E) {
         try decodeEvent("end_update_node", numArgs: 2)
     }
     
-    mutating func decodeBeginUpdateContext() throws(TraceDecoderError) {
+    mutating func decodeBeginUpdateContext() throws(E) {
         skipTillEnd("begin_udate_context")
     }
     
-    mutating func decodeEndUpdateContext() throws(TraceDecoderError) {
+    mutating func decodeEndUpdateContext() throws(E) {
         skipTillEnd("end_update_context")
     }
     
-    mutating func decodeBeginInvalidation() throws(TraceDecoderError) {
+    mutating func decodeBeginInvalidation() throws(E) {
         try decodeEvent("begin_invalidation", numArgs: 2)
     }
     
-    mutating func decodeEndInvalidation() throws(TraceDecoderError) {
+    mutating func decodeEndInvalidation() throws(E) {
         try decodeEvent("end_invalidation", numArgs: 2)
     }
     
-    mutating func decodeBeginModify() throws(TraceDecoderError) {
+    mutating func decodeBeginModify() throws(E) {
         try decodeEvent("begin_modify", hasTimestampt: true, numArgs: 1)
     }
     
-    mutating func decodeEndModify() throws(TraceDecoderError) {
+    mutating func decodeEndModify() throws(E) {
         try decodeEvent("end_modify", hasTimestampt: true, numArgs: 1)
     }
     
-    mutating func decodeBeginEvent() throws(TraceDecoderError) {
+    mutating func decodeBeginEvent() throws(E) {
         skipTillEnd("begin_event")
     }
     
-    mutating func decodeEndEvent() throws(TraceDecoderError) {
+    mutating func decodeEndEvent() throws(E) {
         skipTillEnd("end_event")
     }
     
-    mutating func decodeSnapshotStart() throws(TraceDecoderError) {
+    mutating func decodeSnapshotStart() throws(E) {
         try decodeEvent("snapshot_start", hasTimestampt: true, numArgs: 0)
     }
     
-    mutating func decodeSnapshotEnd() throws(TraceDecoderError) {
+    mutating func decodeSnapshotEnd() throws(E) {
         try decodeEvent("snapshot_end", hasTimestampt: true, numArgs: 0)
     }
 
-    mutating func decodeCreatedContext() throws(TraceDecoderError) {
+    mutating func decodeCreatedContext() throws(E) {
         skipTillEnd("created_context")
     }
     
-    mutating func decodeDestroyContext() throws(TraceDecoderError) {
+    mutating func decodeDestroyContext() throws(E) {
         skipTillEnd("destroy_context")
     }
     
-    mutating func decodeNeedsUpdateContext() throws(TraceDecoderError) {
+    mutating func decodeNeedsUpdateContext() throws(E) {
         skipTillEnd("needs_update_context")
     }
     
-    mutating func decodeCreatedSubgraph() throws(TraceDecoderError) {
+    mutating func decodeCreatedSubgraph() throws(E) {
         try decodeEvent("add_child_subgraph", hasTimestampt: false, numArgs: 2)
     }
     
-    mutating func decodeInvalidateSubgraph() throws(TraceDecoderError) {
+    mutating func decodeInvalidateSubgraph() throws(E) {
         try decodeEvent("invalidate_subgraph", hasTimestampt: false, numArgs: 1)
     }
     
-    mutating func decodeAddChildSubgraph() throws(TraceDecoderError) {
+    mutating func decodeAddChildSubgraph() throws(E) {
         try decodeEvent("add_child_subgraph", hasTimestampt: false, numArgs: 2)
     }
     
-    mutating func decodeRemoveChildSubgraph() throws(TraceDecoderError) {
+    mutating func decodeRemoveChildSubgraph() throws(E) {
         try decodeEvent("remove_child_subgraph", hasTimestampt: false, numArgs: 2)
     }
     
-    mutating func decodeAddedNode() throws(TraceDecoderError) {
+    mutating func decodeAddedNode() throws(E) {
         try decodeEvent("added_node", hasTimestampt: false, numArgs: 3)
     }
     
-    mutating func decodeSetDirty() throws(TraceDecoderError) {
+    mutating func decodeSetDirty() throws(E) {
         try decodeEvent("set_dirty", hasTimestampt: false, numArgs: 2)
     }
     
-    mutating func decodeSetPending() throws(TraceDecoderError) {
+    mutating func decodeSetPending() throws(E) {
         try decodeEvent("set_pending", hasTimestampt: false, numArgs: 2)
     }
     
-    mutating func decodeSetValue() throws(TraceDecoderError) {
+    mutating func decodeSetValue() throws(E) {
         try decodeEvent("set_value", hasTimestampt: false, numArgs: 1)
     }
     
-    mutating func decodeMarkValue() throws(TraceDecoderError) {
+    mutating func decodeMarkValue() throws(E) {
         try decodeEvent("mark_value", hasTimestampt: false, numArgs: 1)
     }
     
-    mutating func decodeAddedIndirectNode() throws(TraceDecoderError) {
+    mutating func decodeAddedIndirectNode() throws(E) {
         try decodeEvent("added_indirect_node", hasTimestampt: false, numArgs: 4)
     }
     
-    mutating func decodeSetSource() throws(TraceDecoderError) {
+    mutating func decodeSetSource() throws(E) {
         try decodeEvent("set_source", hasTimestampt: false, numArgs: 3)
     }
     
-    mutating func decodeSetDependency() throws(TraceDecoderError) {
+    mutating func decodeSetDependency() throws(E) {
         try decodeEvent("set_dependency", hasTimestampt: false, numArgs: 2)
     }
     
-    mutating func decodeAddEdge() throws(TraceDecoderError) {
+    mutating func decodeAddEdge() throws(E) {
         try decodeEvent("add_edge", hasTimestampt: false, numArgs: 2)
     }
     
-    mutating func decodeRemoveEdge() throws(TraceDecoderError) {
+    mutating func decodeRemoveEdge() throws(E) {
         try decodeEvent("remove_edge", hasTimestampt: false, numArgs: 2)
     }
     
-    mutating func decodeSetEdgePending() throws(TraceDecoderError) {
+    mutating func decodeSetEdgePending() throws(E) {
         try decodeEvent("set_endge_pending", hasTimestampt: false, numArgs: 3)
     }
     
-    mutating func decodeMarkProfile() throws(TraceDecoderError) {
+    mutating func decodeMarkProfile() throws(E) {
         skipTillEnd("mark_profile")
     }
     
-    mutating func decodeCustomEvent() throws(TraceDecoderError) {
+    mutating func decodeCustomEvent() throws(E) {
         skipTillEnd("custom_event")
     }
     
-    mutating func decodeDestroySubgraph() throws(TraceDecoderError) {
+    mutating func decodeDestroySubgraph() throws(E) {
         try decodeEvent("destroy_subgraph", hasTimestampt: false, numArgs: 1)
     }
     
-    mutating func decodeNamedEvent() throws(TraceDecoderError) {
+    mutating func decodeNamedEvent() throws(E) {
         skipTillEnd("named_event")
     }
     
-    mutating func decodeSetDeadline() throws(TraceDecoderError) {
+    mutating func decodeSetDeadline() throws(E) {
         skipTillEnd("set_deadline")
     }
     
-    mutating func decodePassedDeadline() throws(TraceDecoderError) {
+    mutating func decodePassedDeadline() throws(E) {
         skipTillEnd("passed_deadline")
     }
     
-    mutating func decodeEvent(_ name: String, hasTimestampt: Bool = true, numArgs: Int) throws(TraceDecoderError) {
+    mutating func decodeEvent(_ name: String, hasTimestampt: Bool = true, numArgs: Int) throws(E) {
         var message = name + ":"
         if hasTimestampt {
             let ts = try decodeFieldTimestamp()
@@ -338,21 +341,93 @@ struct TraceDecoder {
             message += " \(X as Any)"
         }
         
-        try decodeFieldBackTrace(param: 8)
+        _ = try decodeFieldBackTrace(param: 8)
         try assertAtEnd()
         
         print(message)
     }
     
-    mutating func decodeSubgraph() throws(TraceDecoderError) {
-        skipTillEnd("subgraph")
+    mutating func decodeSubgraph() throws(E) {
+        // subgraph->_x18 & 0x7fffffff
+        let x08 = try decodeVariantIfPresent(tag: 0x08)
+        // subgraph->_x30
+        let x10 = try decodeVariantIfPresent(tag: 0x10)
+        // if (subgraph->_x38 == 0) {
+        //     items = {}
+        // } else if ((subgraph->_x38 & 1) == 0) {
+        //     items = { subgraph->_x38 }
+        // } else {
+        //     m = subgraph->_x38 & ~1;
+        //     {base, count} = m->_x20
+        //     b = base == 0 ? m : base
+        //     items = b[0..<count]
+        // }
+        // Skips zeros during encoding
+        let x18 = try decodeArray(tag: 0x18) { (d: inout TraceDecoder) throws(E) in
+            try d.decodeVariant()
+        }
+        // tagged_pointers = subgraph->_x40[0..<subgraph->_x48]
+        // items = tagged_pointers.map { p in
+        //    (p & ~3)->x18 & 0x7f_ff_ff_ff
+        // }
+        // Skips zeros during encoding
+        let x20 = try decodeArray(tag: 0x20) { (d: inout TraceDecoder) throws(E) in
+            try d.decodeVariant()
+        }
+        // item = subgraph->_x68 ? 1 : nil
+        let x28: Bool = (try decodeVariantIfPresent(tag: 0x28) ?? 0) != 0
+        
+        print("subgraph: \(x08 as Any), \(x10 as Any), \(x18), \(x20), \(x28) {")
+        
+        // let w8 = subgraph->_x10
+        // ...
+        let x32: [()] = try decodeArray(tag: 0x32) { (d: inout TraceDecoder) throws(E) in
+            var child = try d.decodeChild()
+            return try child.decodeSubgraphFoo()
+        }
+        
+        // if (subgraph->x60) {
+        //    encode_tree(graph: subgraph->x28, encode: x19, node: subgraph->x60)
+        // }
+        let x3a: ()? = try decodeIfPresent(tag: 0x3a) { (d: inout TraceDecoder) throws(E) in
+            var child = try d.decodeChild()
+            return try child.decodeTree()
+        }
+        
+        print("}")
     }
     
-    mutating func decodeTree() throws(TraceDecoderError) {
+    mutating func decodeSubgraphFoo() throws(E) {
+        let x08 = try decodeVariantIfPresent(tag: 0x08) ?? 0
+        
+        if try decodeTag(0x12) {
+            print("node: \(x08)")
+            var child = try decodeChild()
+            try child.decodeNode()
+        } else if try decodeTag(0x1a) {
+            print("indirectNode: \(x08)")
+            var child = try decodeChild()
+            try child.decodeIndirectNode()
+        } else {
+            if let tag = try peekTag() {
+                throw .invalidFormat("Unexpected tag for subgraphFoo: \(tag, hexWidth: 2)")
+            }
+        }
+    }
+
+    mutating func decodeNode() throws(E) {
+        skipTillEnd("node")
+    }
+    
+    mutating func decodeIndirectNode() throws(E) {
+        skipTillEnd("indirectNode")
+    }
+    
+    mutating func decodeTree() throws(E) {
         skipTillEnd("tree")
     }
     
-    mutating func decodeType() throws(TraceDecoderError) {
+    mutating func decodeType() throws(E) {
         let a = try decodeVariantIfPresent(tag: 0x08)
         let b = try decodeStringIfPresent(tag: 0x12)
         let c = try decodeStringIfPresent(tag: 0x1a)
@@ -362,14 +437,14 @@ struct TraceDecoder {
         print("type: \(a as Any), \(b as Any), \(c as Any), \(d as Any), \(e as Any), \(f as Any)")
     }
     
-    mutating func decodeKey() throws(TraceDecoderError) {
+    mutating func decodeKey() throws(E) {
         let x = try decodeVariantIfPresent(tag: 0x8) ?? 0
         let y = try decodeStringIfPresent(tag: 0x12)
         try assertAtEnd()
         print("key: \(x as Any) \(y as Any)")
     }
         
-    mutating func decodeFieldTimestamp() throws(TraceDecoderError) -> Date {
+    mutating func decodeFieldTimestamp() throws(E) -> Date {
         let magic11 = try decodeVariant()
         if magic11 != 0x11 {
             throw .invalidFormat("Unexpected field timestampt magic: \(magic11, hexWidth: 2))")
@@ -378,23 +453,17 @@ struct TraceDecoder {
         return Date(timeIntervalSinceReferenceDate: ts)
     }
     
-    mutating func decodeFieldBackTrace(param: UInt) throws(TraceDecoderError) {
+    mutating func decodeFieldBackTrace(param: UInt) throws(E) -> [StackFrame] {
         let tag = 2+8*param
         var images: [ImageInfo] = []
-        var frames: [StackFrame] = []
-        while true {
-            let v = try peekVariant()
-            if v != tag {
-                break
-            }
-            self.peekedVariant = nil
-            var child = try decodeChild()
-            let frame = try child.decodeStackFrame(images: &images)
-            frames.append(frame)
+        let frames = try decodeArray(tag: tag) { (d: inout TraceDecoder) throws(E) -> StackFrame in
+            var child = try d.decodeChild()
+            return try child.decodeStackFrame(images: &images)
         }
+        return frames
     }
     
-    mutating func decodeStackFrame(images: inout [ImageInfo]) throws(TraceDecoderError) -> StackFrame {
+    mutating func decodeStackFrame(images: inout [ImageInfo]) throws(E) -> StackFrame {
         if let image = try decodeImageIfPresent() {
             print("image: #\(images.count) \(image.uuid) \(image.baseAddress, hexWidth: 16)..<\(image.baseAddress + image.size, hexWidth: 16) \(image.path)")
             images.append(image)
@@ -413,14 +482,14 @@ struct TraceDecoder {
         return frame
     }
     
-    mutating func decodeImageIfPresent() throws(TraceDecoderError) -> ImageInfo? {
-        try decodeIfPresent(tag: 0x1a) { (d: inout TraceDecoder) throws(TraceDecoderError) -> ImageInfo in
+    mutating func decodeImageIfPresent() throws(E) -> ImageInfo? {
+        try decodeIfPresent(tag: 0x1a) { (d: inout TraceDecoder) throws(E) -> ImageInfo in
             var child = try d.decodeChild()
             return try child.decodeImage()
         }
     }
     
-    mutating func decodeImage() throws(TraceDecoderError) -> ImageInfo {
+    mutating func decodeImage() throws(E) -> ImageInfo {
         guard let uuid = try decodeUUIDIfPresent(tag: 0x0a) else {
             throw .invalidFormat("UUID is required in ImageInfo")
         }
@@ -430,13 +499,13 @@ struct TraceDecoder {
         return ImageInfo(uuid: uuid, path: path, baseAddress: baseAddr, size: size)
     }
     
-    mutating func decodeUUIDIfPresent(tag: UInt) throws(TraceDecoderError) -> UUID? {
-        try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(TraceDecoderError) -> UUID in
+    mutating func decodeUUIDIfPresent(tag: UInt) throws(E) -> UUID? {
+        try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(E) -> UUID in
             try d.decodeUUID()
         }
     }
     
-    mutating func decodeUUID() throws(TraceDecoderError) -> UUID {
+    mutating func decodeUUID() throws(E) -> UUID {
         let text = try decodeString()
         guard let UUID = UUID(uuidString: text) else {
             throw .invalidFormat("Invalid UUID format: \(text)")
@@ -444,67 +513,78 @@ struct TraceDecoder {
         return UUID
     }
     
+    private mutating func decodeArray<T>(
+        tag: UInt,
+        block: (inout TraceDecoder) throws(E) -> T
+    ) throws(E) -> [T] {
+        var result: [T] = []
+        while try decodeTag(tag) {
+            let item = try block(&self)
+            result.append(item)
+        }
+        return result
+    }
+    
     private mutating func decodeIfPresent<T>(
         tag: UInt,
-        block: (inout TraceDecoder) throws(TraceDecoderError) -> T
-    ) throws(TraceDecoderError) -> T? {
-        if try peekVariant() == tag {
-            self.peekedVariant = nil
+        block: (inout TraceDecoder) throws(E) -> T
+    ) throws(E) -> T? {
+        if try decodeTag(tag) {
             return try block(&self)
         }
         return nil
     }
     
-    private mutating func decodeVariantIfPresent(tag: UInt) throws(TraceDecoderError) -> UInt? {
-        return try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(TraceDecoderError) -> UInt in
+    private mutating func decodeVariantIfPresent(tag: UInt) throws(E) -> UInt? {
+        return try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(E) -> UInt in
             try d.decodeVariantImpl()
         }
     }
     
-    private mutating func decodeDataIfPresent(tag: UInt) throws(TraceDecoderError) -> Data? {
-        return try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(TraceDecoderError) -> Data in
+    private mutating func decodeDataIfPresent(tag: UInt) throws(E) -> Data? {
+        return try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(E) -> Data in
             try d.decodeLengthDelimited()
         }
     }
     
-    private mutating func decodeStringIfPresent(tag: UInt) throws(TraceDecoderError) -> String? {
-        return try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(TraceDecoderError) -> String in
+    private mutating func decodeStringIfPresent(tag: UInt) throws(E) -> String? {
+        return try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(E) -> String in
             try d.decodeString()
         }
     }
 
-    private mutating func decodeVariant() throws(TraceDecoderError) -> UInt {
-        if let peekedVariant {
-            self.peekedVariant = nil
-            return peekedVariant
+    private mutating func decodeVariant() throws(E) -> UInt {
+        if let peekedTag {
+            self.peekedTag = nil
+            return peekedTag
         }
         return try decodeVariantImpl()
     }
     
-    private mutating func decodeVariantImpl() throws(TraceDecoderError) -> UInt {
+    private mutating func decodeVariantImpl() throws(E) -> UInt {
         return try mappingError { () throws(DecoderError) -> UInt in
             try decoder.decodeVariant()
         }
     }
     
-    private mutating func decodeFixed64() throws(TraceDecoderError) -> UInt64 {
+    private mutating func decodeFixed64() throws(E) -> UInt64 {
         return try mappingError { () throws(DecoderError) -> UInt64 in
             try decoder.decodeFixed64()
         }
     }
     
-    private mutating func decodeDouble() throws(TraceDecoderError) -> Double {
+    private mutating func decodeDouble() throws(E) -> Double {
         let bits = try decodeFixed64()
         return Double(bitPattern: bits)
     }
     
-    private mutating func decodeLengthDelimited() throws(TraceDecoderError) -> Data {
+    private mutating func decodeLengthDelimited() throws(E) -> Data {
         return try mappingError { () throws(DecoderError) -> Data in
             try decoder.decodeLengthDelimited()
         }
     }
     
-    private mutating func decodeString() throws(TraceDecoderError) -> String {
+    private mutating func decodeString() throws(E) -> String {
         let data = try decodeLengthDelimited()
         guard let text = String(data: data, encoding: .utf8) else {
             throw .invalidFormat("Failed to decode string from data")
@@ -512,12 +592,12 @@ struct TraceDecoder {
         return text
     }
     
-    private mutating func decodeChild() throws(TraceDecoderError) -> TraceDecoder {
+    private mutating func decodeChild() throws(E) -> TraceDecoder {
         let data = try decodeLengthDelimited()
         return TraceDecoder(data: data)
     }
         
-    private func mappingError<T>( _ block: () throws(DecoderError) -> T) throws(TraceDecoderError) -> T {
+    private func mappingError<T>( _ block: () throws(DecoderError) -> T) throws(E) -> T {
         do {
             return try block()
         } catch let e {
@@ -527,7 +607,7 @@ struct TraceDecoder {
         }
     }
     
-    private func assertAtEnd() throws(TraceDecoderError) {
+    private func assertAtEnd() throws(E) {
         if !decoder.isAtEnd {
             throw .invalidFormat("Unexpected extra content")
         }
@@ -538,11 +618,19 @@ struct TraceDecoder {
         decoder.position = decoder.data.count
     }
     
-    private mutating func peekVariant() throws(TraceDecoderError) -> UInt? {
-        if let peekedVariant { return peekedVariant }
+    private mutating func decodeTag(_ tag: UInt) throws(E) -> Bool {
+        if try peekTag() == tag {
+            self.peekedTag = nil
+            return true
+        }
+        return false
+    }
+    
+    private mutating func peekTag() throws(E) -> UInt? {
+        if let peekedTag { return peekedTag }
         if decoder.isAtEnd { return nil }
         let result = try decodeVariantImpl()
-        peekedVariant = result
+        peekedTag = result
         return result
     }
     
