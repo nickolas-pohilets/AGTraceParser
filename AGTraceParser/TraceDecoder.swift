@@ -348,7 +348,7 @@ struct TraceDecoder {
     }
     
     mutating func decodeSubgraph() throws(E) {
-        // subgraph->_x18 & 0x7fffffff
+        // subgraph->_w18 & 0x7fffffff
         let x08 = try decodeVarIntIfPresent(tag: 0x08)
         // subgraph->_x30
         let x10 = try decodeVarIntIfPresent(tag: 0x10)
@@ -366,28 +366,28 @@ struct TraceDecoder {
         let x18 = try decodeArray(tag: 0x18) { (d: inout TraceDecoder) throws(E) in
             try d.decodeVarInt()
         }
-        // tagged_pointers = subgraph->_x40[0..<subgraph->_x48]
+        // tagged_pointers = subgraph->_x40[0..<subgraph->_w48]
         // items = tagged_pointers.map { p in
-        //    (p & ~3)->x18 & 0x7f_ff_ff_ff
+        //    (p & ~3)->w18 & 0x7f_ff_ff_ff
         // }
         // Skips zeros during encoding
         let x20 = try decodeArray(tag: 0x20) { (d: inout TraceDecoder) throws(E) in
             try d.decodeVarInt()
         }
-        // item = subgraph->_x68 ? 1 : nil
+        // item = subgraph->_b68 ? 1 : nil
         let x28: Bool = (try decodeVarIntIfPresent(tag: 0x28) ?? 0) != 0
         
         print("subgraph: \(x08, default: "nil"), \(x10, default: "nil"), \(x18), \(x20), \(x28) {")
         
-        // let w8 = subgraph->_x10
+        // let w8 = subgraph->_w10
         // ...
         let x32: [()] = try decodeArray(tag: 0x32) { (d: inout TraceDecoder) throws(E) in
             var child = try d.decodeChild()
             return try child.decodeSubgraphFoo()
         }
         
-        // if (subgraph->x60) {
-        //    encode_tree(graph: subgraph->x28, encode: x19, node: subgraph->x60)
+        // if (subgraph->w60) {
+        //    encode_tree(graph: subgraph->x28, encode: x19, node: subgraph->w60)
         // }
         let x3a: ()? = try decodeIfPresent(tag: 0x3a) { (d: inout TraceDecoder) throws(E) in
             var child = try d.decodeChild()
