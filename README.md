@@ -14,3 +14,26 @@ To record a trace:
     2. `tracing/stop`
     3. `tracing/sync`
 * Path to the `.ag-trace` will be printed in the console of the app.
+
+
+## Known Environment Variables
+
+* `AG_ASYNC_LAYOUTS`
+* `AG_DEBUG_SERVER=1|3` - starts debug server, `1` - serves on localhost, `3` - serves on externally visible IP address.
+* `AG_PREFETCH_LAYOUTS`
+* `AG_PRINT_CYCLES`
+* `AG_PRINT_LAYOUTS`
+* `AG_PROFILE` - profile flags, as decimal number
+* `AG_TRACE` - tracing flags, as decimal, hex or octal number and/or a comma/space separated list of keywords:
+    * `enabled` - sets flag 0x01 (must be set for tracing to work at all)
+    * `full` - sets flag 0x02
+    * `backtrace` - sets flag 0x04
+    * `prepare` - sets flag 0x08
+    * `custom` - sets flag 0x10, disables most of the standard messages
+    * `all` - sets flag 0x20
+    Unrecorgnized keywords are treated as names of subsystems.
+* `AG_TRACE_FILE` - path or file name used as a base for generating file name of a new trace file. Resulting trace path is formed by appending a counter and `.ag-trace` extension. If path is not an absolute path, it is appended to `$TMPDIR`.
+* `AG_TRACE_STACK_FRAMES`
+* `AG_TRAP_CYCLES`
+* `AG_UNMAP_REUSABLE`
+* `AG_TREE` 
