@@ -30,6 +30,14 @@ struct StackFrame {
     var offset: UInt
 }
 
+struct Tree {
+    let x10: UInt
+    let x18: UInt
+    var children: [Tree]
+    var x2a: [(UInt, UInt, UInt)]
+    var x30: [UInt]
+}
+
 struct TraceDecoder {
     typealias E = TraceDecoderError
     
@@ -51,8 +59,6 @@ struct TraceDecoder {
                 try child.decodeRecord()
             } else if sep == 0x12 {
                 try child.decodeSubgraph()
-            } else if sep == 0x3a {
-                try child.decodeTree()
             } else if sep == 0x1a {
                 try child.decodeType()
             } else if sep == 0x22 {
@@ -389,9 +395,13 @@ struct TraceDecoder {
         // if (subgraph->w60) {
         //    encode_tree(graph: subgraph->x28, encode: x19, node: subgraph->w60)
         // }
-        let x3a: ()? = try decodeIfPresent(tag: 0x3a) { (d: inout TraceDecoder) throws(E) in
+        let x3a: Tree? = try decodeIfPresent(tag: 0x3a) { (d: inout TraceDecoder) throws(E) -> Tree in
             var child = try d.decodeChild()
             return try child.decodeTree()
+        }
+        
+        if let tree = x3a {
+            dump(tree, name: "tree")
         }
         
         print("}")
@@ -530,8 +540,39 @@ struct TraceDecoder {
         print("indirectNode: \(x08, default: "nil"), \(x10, default: "nil"), \(x18, default: "nil"), \(x20, default: "nil"), \(x28, default: "nil"), \(x30)")
     }
     
-    mutating func decodeTree() throws(E) {
-        skipTillEnd("tree")
+    mutating func decodeTree() throws(E) -> Tree {
+        // node->_w08 if >= 4
+        let x10 = try decodeVarIntIfPresent(tag: 0x10) ?? 0
+        // node->_w0c if
+        let x18 = try decodeVarIntIfPresent(tag: 0x18) ?? 0
+        
+        // 32-bit offsets from *AG::data::_shared_table_bytes
+        // * child: node->_w14
+        // * next: node->_w18
+        let children = try decodeArray(tag: 0x22) { (d: inout TraceDecoder) throws (E) -> Tree in
+            var child = try d.decodeChild()
+            return try child.decodeTree()
+        }
+        
+        // * head: node->_w1c
+        // * next: item->_w14
+        let x2a = try decodeArray(tag: 0x2a) { (d: inout TraceDecoder) throws (E) -> (UInt, UInt, UInt) in
+            var child = try d.decodeChild()
+            // item->_w08 if >= 4
+            let x10 = try child.decodeVarIntIfPresent(tag: 0x10) ?? 0
+            // item->_w0c
+            let x18 = try child.decodeVarIntIfPresent(tag: 0x18) ?? 0
+            // item->_w10
+            let x20 = try child.decodeVarIntIfPresent(tag: 0x20) ?? 0
+            
+            return (x10, x18, x20)
+        }
+        
+        let x30 = try decodeArray(tag: 0x30) { (d: inout TraceDecoder) throws (E) -> UInt in
+            return try d.decodeVarInt()
+        }
+        
+        return Tree(x10: x10, x18: x18, children: children, x2a: x2a, x30: x30)
     }
     
     mutating func decodeType() throws(E) {
