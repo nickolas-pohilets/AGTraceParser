@@ -18,7 +18,7 @@ struct Decoder {
         return position >= data.count
     }
     
-    mutating func decodeVariant() throws(DecoderError) -> UInt {
+    mutating func decodeVarInt() throws(DecoderError) -> UInt {
         var x: UInt = 0
         var shift = 0
         while (true) {
@@ -40,7 +40,7 @@ struct Decoder {
     }
     
     mutating func decodeLengthDelimited() throws(DecoderError) -> Data {
-        let length = Int(try decodeVariant())
+        let length = Int(try decodeVarInt())
         guard position + length <= data.count else {
             throw .eof
         }

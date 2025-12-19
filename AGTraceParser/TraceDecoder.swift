@@ -45,7 +45,7 @@ struct TraceDecoder {
         while !decoder.isAtEnd {
             let pos = decoder.position
             print("@\(pos, hexWidth: 6)")
-            let sep = try self.decodeVariant()
+            let sep = try self.decodeVarInt()
             var child = try decodeChild()
             if sep == 0x0A {
                 try child.decodeRecord()
@@ -65,12 +65,12 @@ struct TraceDecoder {
     }
     
     mutating func decodeRecord() throws(E) {
-        let magic08 = try decodeVariant()
+        let magic08 = try decodeVarInt()
         if magic08 != 0x08 {
             print("Unexpected record magic: \(magic08, hexWidth: 2))")
             return
         }
-        let kind = try self.decodeVariant()
+        let kind = try self.decodeVarInt()
         switch kind {
         case 0x01:
             try self.decodeBeginTrace()
@@ -337,7 +337,7 @@ struct TraceDecoder {
         }
         
         for i in 0..<numArgs {
-            let X = try decodeVariantIfPresent(tag: 0x18 + 8 * UInt(i))
+            let X = try decodeVarIntIfPresent(tag: 0x18 + 8 * UInt(i))
             message += " \(X, default: "nil")"
         }
         
@@ -349,9 +349,9 @@ struct TraceDecoder {
     
     mutating func decodeSubgraph() throws(E) {
         // subgraph->_x18 & 0x7fffffff
-        let x08 = try decodeVariantIfPresent(tag: 0x08)
+        let x08 = try decodeVarIntIfPresent(tag: 0x08)
         // subgraph->_x30
-        let x10 = try decodeVariantIfPresent(tag: 0x10)
+        let x10 = try decodeVarIntIfPresent(tag: 0x10)
         // if (subgraph->_x38 == 0) {
         //     items = {}
         // } else if ((subgraph->_x38 & 1) == 0) {
@@ -364,7 +364,7 @@ struct TraceDecoder {
         // }
         // Skips zeros during encoding
         let x18 = try decodeArray(tag: 0x18) { (d: inout TraceDecoder) throws(E) in
-            try d.decodeVariant()
+            try d.decodeVarInt()
         }
         // tagged_pointers = subgraph->_x40[0..<subgraph->_x48]
         // items = tagged_pointers.map { p in
@@ -372,10 +372,10 @@ struct TraceDecoder {
         // }
         // Skips zeros during encoding
         let x20 = try decodeArray(tag: 0x20) { (d: inout TraceDecoder) throws(E) in
-            try d.decodeVariant()
+            try d.decodeVarInt()
         }
         // item = subgraph->_x68 ? 1 : nil
-        let x28: Bool = (try decodeVariantIfPresent(tag: 0x28) ?? 0) != 0
+        let x28: Bool = (try decodeVarIntIfPresent(tag: 0x28) ?? 0) != 0
         
         print("subgraph: \(x08, default: "nil"), \(x10, default: "nil"), \(x18), \(x20), \(x28) {")
         
@@ -398,7 +398,7 @@ struct TraceDecoder {
     }
     
     mutating func decodeSubgraphFoo() throws(E) {
-        let x08 = try decodeVariantIfPresent(tag: 0x08) ?? 0
+        let x08 = try decodeVarIntIfPresent(tag: 0x08) ?? 0
         
         if try decodeTag(0x12) {
             print("node: \(x08)")
@@ -428,24 +428,24 @@ struct TraceDecoder {
     }
     
     mutating func decodeType() throws(E) {
-        let a = try decodeVariantIfPresent(tag: 0x08)
+        let a = try decodeVarIntIfPresent(tag: 0x08)
         let b = try decodeStringIfPresent(tag: 0x12)
         let c = try decodeStringIfPresent(tag: 0x1a)
-        let d = try decodeVariantIfPresent(tag: 0x20)
-        let e = try decodeVariantIfPresent(tag: 0x28)
-        let f = try decodeVariantIfPresent(tag: 0x30)
+        let d = try decodeVarIntIfPresent(tag: 0x20)
+        let e = try decodeVarIntIfPresent(tag: 0x28)
+        let f = try decodeVarIntIfPresent(tag: 0x30)
         print("type: \(a, default: "nil"), \(b, default: "nil"), \(c, default: "nil"), \(d, default: "nil"), \(e, default: "nil"), \(f, default: "nil")")
     }
     
     mutating func decodeKey() throws(E) {
-        let x = try decodeVariantIfPresent(tag: 0x8) ?? 0
+        let x = try decodeVarIntIfPresent(tag: 0x8) ?? 0
         let y = try decodeStringIfPresent(tag: 0x12)
         try assertAtEnd()
         print("key: \(x, default: "nil") \(y, default: "nil")")
     }
         
     mutating func decodeFieldTimestamp() throws(E) -> Date {
-        let magic11 = try decodeVariant()
+        let magic11 = try decodeVarInt()
         if magic11 != 0x11 {
             throw .invalidFormat("Unexpected field timestampt magic: \(magic11, hexWidth: 2))")
         }
@@ -468,8 +468,8 @@ struct TraceDecoder {
             print("image: #\(images.count) \(image.uuid) \(image.baseAddress, hexWidth: 16)..<\(image.baseAddress + image.size, hexWidth: 16) \(image.path)")
             images.append(image)
         }
-        let index = try decodeVariantIfPresent(tag: 0x8) ?? 0
-        let offset = try decodeVariantIfPresent(tag: 0x10) ?? 0
+        let index = try decodeVarIntIfPresent(tag: 0x8) ?? 0
+        let offset = try decodeVarIntIfPresent(tag: 0x10) ?? 0
         try assertAtEnd()
         
         if index >= images.count {
@@ -494,8 +494,8 @@ struct TraceDecoder {
             throw .invalidFormat("UUID is required in ImageInfo")
         }
         let path = try decodeStringIfPresent(tag: 0x12) ?? ""
-        let baseAddr = try decodeVariantIfPresent(tag: 0x18) ?? 0
-        let size = try decodeVariantIfPresent(tag: 0x20) ?? 0
+        let baseAddr = try decodeVarIntIfPresent(tag: 0x18) ?? 0
+        let size = try decodeVarIntIfPresent(tag: 0x20) ?? 0
         return ImageInfo(uuid: uuid, path: path, baseAddress: baseAddr, size: size)
     }
     
@@ -535,9 +535,9 @@ struct TraceDecoder {
         return nil
     }
     
-    private mutating func decodeVariantIfPresent(tag: UInt) throws(E) -> UInt? {
+    private mutating func decodeVarIntIfPresent(tag: UInt) throws(E) -> UInt? {
         return try decodeIfPresent(tag: tag) { (d: inout TraceDecoder) throws(E) -> UInt in
-            try d.decodeVariantImpl()
+            try d.decodeVarIntImpl()
         }
     }
     
@@ -553,17 +553,17 @@ struct TraceDecoder {
         }
     }
 
-    private mutating func decodeVariant() throws(E) -> UInt {
+    private mutating func decodeVarInt() throws(E) -> UInt {
         if let peekedTag {
             self.peekedTag = nil
             return peekedTag
         }
-        return try decodeVariantImpl()
+        return try decodeVarIntImpl()
     }
     
-    private mutating func decodeVariantImpl() throws(E) -> UInt {
+    private mutating func decodeVarIntImpl() throws(E) -> UInt {
         return try mappingError { () throws(DecoderError) -> UInt in
-            try decoder.decodeVariant()
+            try decoder.decodeVarInt()
         }
     }
     
@@ -629,7 +629,7 @@ struct TraceDecoder {
     private mutating func peekTag() throws(E) -> UInt? {
         if let peekedTag { return peekedTag }
         if decoder.isAtEnd { return nil }
-        let result = try decodeVariantImpl()
+        let result = try decodeVarIntImpl()
         peekedTag = result
         return result
     }
