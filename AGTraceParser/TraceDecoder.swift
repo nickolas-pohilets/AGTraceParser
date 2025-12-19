@@ -338,7 +338,7 @@ struct TraceDecoder {
         
         for i in 0..<numArgs {
             let X = try decodeVariantIfPresent(tag: 0x18 + 8 * UInt(i))
-            message += " \(X as Any)"
+            message += " \(X, default: "nil")"
         }
         
         _ = try decodeFieldBackTrace(param: 8)
@@ -377,7 +377,7 @@ struct TraceDecoder {
         // item = subgraph->_x68 ? 1 : nil
         let x28: Bool = (try decodeVariantIfPresent(tag: 0x28) ?? 0) != 0
         
-        print("subgraph: \(x08 as Any), \(x10 as Any), \(x18), \(x20), \(x28) {")
+        print("subgraph: \(x08, default: "nil"), \(x10, default: "nil"), \(x18), \(x20), \(x28) {")
         
         // let w8 = subgraph->_x10
         // ...
@@ -434,14 +434,14 @@ struct TraceDecoder {
         let d = try decodeVariantIfPresent(tag: 0x20)
         let e = try decodeVariantIfPresent(tag: 0x28)
         let f = try decodeVariantIfPresent(tag: 0x30)
-        print("type: \(a as Any), \(b as Any), \(c as Any), \(d as Any), \(e as Any), \(f as Any)")
+        print("type: \(a, default: "nil"), \(b, default: "nil"), \(c, default: "nil"), \(d, default: "nil"), \(e, default: "nil"), \(f, default: "nil")")
     }
     
     mutating func decodeKey() throws(E) {
         let x = try decodeVariantIfPresent(tag: 0x8) ?? 0
         let y = try decodeStringIfPresent(tag: 0x12)
         try assertAtEnd()
-        print("key: \(x as Any) \(y as Any)")
+        print("key: \(x, default: "nil") \(y, default: "nil")")
     }
         
     mutating func decodeFieldTimestamp() throws(E) -> Date {
