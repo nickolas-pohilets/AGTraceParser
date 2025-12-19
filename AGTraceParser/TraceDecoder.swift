@@ -375,7 +375,7 @@ struct TraceDecoder {
             try d.decodeVarInt()
         }
         // item = subgraph->_b68 ? 1 : nil
-        let x28: Bool = (try decodeVarIntIfPresent(tag: 0x28) ?? 0) != 0
+        let x28: Bool = try decodeBool(tag: 0x28)
         
         print("subgraph: \(x08, default: "nil"), \(x10, default: "nil"), \(x18), \(x20), \(x28) {")
         
@@ -416,7 +416,86 @@ struct TraceDecoder {
     }
 
     mutating func decodeNode() throws(E) {
-        skipTillEnd("node")
+        // this->_w00 >> 8
+        let x08: UInt = try decodeVarIntIfPresent(tag: 0x08) ?? 0
+        
+        // String returned by a function
+        // x0 = *(graph->_x58 + ((this->_w00 >> 5) & ~7)
+        // x8 = x0->_x20->_x20
+        // if (x8 != 0) {
+        //     x1 = *AG::data::_shared_table_bytes + this->_w08
+        //     if (this->_b07 & 1) {
+        //         x0 = x8()
+        //         if (x0)
+        // }
+        let x10 = try decodeStringIfPresent(tag: 0x12)
+        
+        //  base = *AG::data::_shared_table_bytes + this->_w18
+        //  count = (this->_w14 >> 5)
+        //  items = base[0..<count]
+        //  each item is 5 bytes, byte-aligned
+        //  first 4 bytes - number, last one - flags
+        let x1a = try decodeArray(tag: 0x1a) { (d: inout TraceDecoder) throws (E) -> (UInt, Bool, Bool, Bool, Bool, Bool) in
+            var child = try d.decodeChild()
+            let x08: UInt = try child.decodeVarIntIfPresent(tag: 0x08) ?? 00
+            
+            // flags & 0x01
+            let x10 = try child.decodeBool(tag: 0x10)
+            
+            // flags & 0x04
+            let x18 = try child.decodeBool(tag: 0x18)
+            
+            // flags & 0x10
+            let x20 = try child.decodeBool(tag: 0x20)
+            
+            // flags & 0x20
+            let x30 = try child.decodeBool(tag: 0x30)
+            
+            // flags & 0x08
+            let x38 = try child.decodeBool(tag: 0x38)
+            
+            return (x08, x10, x18, x20, x30, x38)
+        }
+        
+        let x22: [UInt?] = try decodeArray(tag: 0x22) { (d: inout TraceDecoder) throws (E) -> UInt? in
+            var child = try d.decodeChild()
+            return try child.decodeVarIntIfPresent(tag: 0x08)
+        }
+        
+        // this->_w00 & 0x1
+        let x28 = try decodeVarIntIfPresent(tag: 0x28) ?? 0
+        
+        // this->_w00 & 0x2
+        let x30 = try decodeVarIntIfPresent(tag: 0x30) ?? 0
+        
+        // (this->_w00 >> 6) & 3
+        let x38 = try decodeVarIntIfPresent(tag: 0x38) ?? 0
+        
+        // this->_b06
+        let x40 = try decodeVarIntIfPresent(tag: 0x40) ?? 0
+        
+        // this->_w00 & 0x04
+        let x48: Bool = try decodeBool(tag: 0x48)
+        
+        // this->_w00 & 0x08
+        let x50: Bool = try decodeBool(tag: 0x50)
+        
+        // this->_b07 & 0x20
+        let x58: Bool = try decodeBool(tag: 0x58)
+        
+        // this->_w00 & 0x10
+        let x60: Bool = try decodeBool(tag: 0x60)
+        
+        // this->_w00 & 0x20
+        let x68: Bool = try decodeBool(tag: 0x68)
+        
+        // this->_b07 & 0x10
+        let x70: Bool = try decodeBool(tag: 0x70)
+        
+        // this->_b07 & 0x40
+        let x78: Bool = try decodeBool(tag: 0x78)
+        
+        print("node: \(x08), \(x10, default: "nil"), \(x1a), \(x22), \(x28, default: "nil"), \(x30), \(x38), \(x40), \(x48), \(x50), \(x58), \(x60), \(x68), \(x70), \(x78)")
     }
     
     mutating func decodeIndirectNode() throws(E) {
@@ -580,6 +659,14 @@ struct TraceDecoder {
             try d.decodeString()
         }
     }
+    
+    private mutating func decodeBool(tag: UInt) throws(E) -> Bool {
+        let value = try decodeVarIntIfPresent(tag: tag) ?? 0
+        if value > 1 {
+            throw .invalidFormat("Value for tag \(tag, hexWidth: 2) is too large for Bool: \(value)")
+        }
+        return value > 0
+    }
 
     private mutating func decodeVarInt() throws(E) -> UInt {
         if let peekedTag {
@@ -654,6 +741,11 @@ struct TraceDecoder {
         return false
     }
     
+    // Last 3 bits of the tag seem to encode the type of the field:
+    // * 0b000 - varint
+    // * 0b001 - fixed64
+    // * 0b010 - container
+    // This is suspiciously compatible with protobuf format
     private mutating func peekTag() throws(E) -> UInt? {
         if let peekedTag { return peekedTag }
         if decoder.isAtEnd { return nil }
