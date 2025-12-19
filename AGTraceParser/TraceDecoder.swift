@@ -401,11 +401,11 @@ struct TraceDecoder {
         let x08 = try decodeVarIntIfPresent(tag: 0x08) ?? 0
         
         if try decodeTag(0x12) {
-            print("node: \(x08)")
+            print("any_node: \(x08) node")
             var child = try decodeChild()
             try child.decodeNode()
         } else if try decodeTag(0x1a) {
-            print("indirectNode: \(x08)")
+            print("any_node: \(x08) indirectNode")
             var child = try decodeChild()
             try child.decodeIndirectNode()
         } else {
@@ -420,7 +420,35 @@ struct TraceDecoder {
     }
     
     mutating func decodeIndirectNode() throws(E) {
-        skipTillEnd("indirectNode")
+        // this->_w00
+        let x08 = try decodeVarIntIfPresent(tag: 0x08)
+        // this->_w04
+        let x10 = try decodeVarIntIfPresent(tag: 0x10)
+        // this->_w08 >> 2
+        let x18 = try decodeVarIntIfPresent(tag: 0x18)
+        // if ((this->_w0c + 1) & 0xff_ff >= 2) {
+        //     encode(this->_w0c)
+        // }
+        let x20 = try decodeVarIntIfPresent(tag: 0x20)
+        
+        // if (this->_w08 & 1) {
+        //
+        //     this->_w10
+        let x28 = try decodeVarIntIfPresent(tag: 0x28)
+        
+        //      base = *AG::data::_shared_table_bytes + this->_w18
+        //      count = (this->_w14 >> 5)
+        //      items = base[0..<count]
+        let x30: [UInt?] = try decodeArray(tag: 0x32) { (d: inout TraceDecoder) throws (E) -> UInt? in
+            var child = try d.decodeChild()
+            return try child.decodeVarIntIfPresent(tag: 0x08)
+        }
+        
+        // }
+        
+        try assertAtEnd()
+        
+        print("indirectNode: \(x08, default: "nil"), \(x10, default: "nil"), \(x18, default: "nil"), \(x20, default: "nil"), \(x28, default: "nil"), \(x30)")
     }
     
     mutating func decodeTree() throws(E) {
