@@ -25,6 +25,27 @@ class ImageInfo {
     }
 }
 
+enum ArgType: Hashable {
+    case nodeID
+    case subgraphID
+    case typeID
+    case keyID
+    case bool
+    case unknown(String)
+    
+    var name: String {
+        switch self {
+        case .nodeID: return "node_id"
+        case .subgraphID: return "subgraph_id"
+        case .typeID: return "type_id"
+        case .keyID: return "key_id"
+
+        case .bool: return "bool"
+        case .unknown(let name): return name
+        }
+    }
+}
+
 struct StackFrame {
     var image: ImageInfo
     var offset: UInt
@@ -32,10 +53,89 @@ struct StackFrame {
 
 struct Tree {
     let x10: UInt
-    let x18: UInt
+    let x18: Bool
     var children: [Tree]
-    var x2a: [(UInt, UInt, UInt)]
+    var x2a: [(UInt, UInt, Bool)]
     var x30: [UInt]
+}
+
+extension Set<UInt> {
+    var setDescription: String {
+        if count <= 20 {
+            return self.sorted().description
+        }
+        return "<\(self.count) in \(self.min()!)...\(self.max()!)>"
+    }
+}
+
+class NamespaceTracker {
+    var ns: [ArgType: Set<UInt>] = [:]
+    
+    func add(_ name: ArgType, _ id: UInt) {
+        ns[name, default: []].insert(id)
+    }
+    
+    func add(_ name: ArgType, _ id: UInt?) {
+        self.add(name, id ?? 0)
+    }
+    
+    func add(_ name: ArgType, _ ids: [UInt]) {
+        for id in ids {
+            self.add(name, id)
+        }
+    }
+    
+    func analyze() {
+        var unmatched = Set<ArgType>(ns.keys)
+        let allNames = ns.keys.sorted(by: { $0.name < $1.name }).filter {
+            let values = ns[$0]!
+            if values.count > 2 { return true }
+            let allValues = values.sorted()
+            if allValues.last! > 1 { return true }
+            unmatched.remove($0)
+            print("Bool: \($0.name) \(values.setDescription)")
+            return false
+        }
+        
+        for name in ns.keys.sorted(by: { $0.name < $1.name }) {
+            if case .unknown = name { continue }
+            let x = ns[name]!
+            print("KNOWN: \(name.name) \(x.setDescription)")
+        }
+
+        for i in 0..<allNames.count {
+            let a = ns[allNames[i]]!
+            if a.isEmpty { continue }
+            
+            for j in (i+1)..<allNames.count {
+                let b = ns[allNames[j]]!
+                if b.isEmpty { continue }
+                
+                let c = a.intersection(b)
+                
+                if c.count == min(a.count, b.count) && c.count > 3 {
+                    let relation: String
+                    if a.count < b.count {
+                        relation = "⊂"
+                    } else if a.count > b.count {
+                        relation = "⊃"
+                    } else {
+                        relation = "="
+                    }
+                    print("MATCH: \(a.setDescription) \(allNames[i].name) \(relation) \(allNames[j].name) \(b.setDescription)")
+                    unmatched.remove(allNames[i])
+                    unmatched.remove(allNames[j])
+                }
+            }
+        }
+        
+        for name in unmatched.sorted(by: { $0.name < $1.name }) {
+            if case .unknown = name {
+                let x = ns[name]!
+                print("UNMATCHED: \(name.name) \(x.setDescription)")
+            }
+        }
+    }
 }
 
 struct TraceDecoder {
@@ -43,16 +143,18 @@ struct TraceDecoder {
     
     var decoder: Decoder
     var peekedTag: UInt? = nil
+    let nsTracker: NamespaceTracker
     
-    init(data: Data) {
+    init(data: Data, nsTracker: NamespaceTracker?) {
         self.decoder = Decoder(data: data)
         self.peekedTag = nil
+        self.nsTracker = nsTracker ?? NamespaceTracker()
     }
     
     mutating func decodeAll() throws(E) {
         while !decoder.isAtEnd {
             let pos = decoder.position
-            print("@\(pos, hexWidth: 6)")
+            //print("@\(pos, hexWidth: 6)")
             let sep = try self.decodeVarInt()
             var child = try decodeChild()
             if sep == 0x0A {
@@ -176,27 +278,27 @@ struct TraceDecoder {
     }
     
     mutating func decodeBeginUpdateSubgraph() throws(E) {
-        try decodeEvent("begin_update_subgraph", numArgs: 2)
+        try decodeEvent("begin_update_subgraph", numArgs: 2, argTypes: [.subgraphID, .bool])
     }
     
     mutating func decodeEndUpdateSubgraph() throws(E) {
-        try decodeEvent("end_update_subgraph", numArgs: 1)
+        try decodeEvent("end_update_subgraph", numArgs: 1, argTypes: [.subgraphID])
     }
     
     mutating func decodeBeginUpdateStack() throws(E) {
-        try decodeEvent("begin_update_stack", numArgs: 2)
+        try decodeEvent("begin_update_stack", numArgs: 2, argTypes: [.nodeID])
     }
     
     mutating func decodeEndUpdateStack() throws(E) {
-        try decodeEvent("end_update_stack", numArgs: 2)
+        try decodeEvent("end_update_stack", numArgs: 2, argTypes: [.nodeID, .bool])
     }
     
     mutating func decodeBeginUpdateNode() throws(E) {
-        try decodeEvent("begin_update_node", numArgs: 1)
+        try decodeEvent("begin_update_node", numArgs: 1, argTypes: [.nodeID])
     }
     
     mutating func decodeEndUpdateNode() throws(E) {
-        try decodeEvent("end_update_node", numArgs: 2)
+        try decodeEvent("end_update_node", numArgs: 2, argTypes: [.nodeID, .bool])
     }
     
     mutating func decodeBeginUpdateContext() throws(E) {
@@ -208,19 +310,19 @@ struct TraceDecoder {
     }
     
     mutating func decodeBeginInvalidation() throws(E) {
-        try decodeEvent("begin_invalidation", numArgs: 2)
+        try decodeEvent("begin_invalidation", numArgs: 2, argTypes: [.nodeID])
     }
     
     mutating func decodeEndInvalidation() throws(E) {
-        try decodeEvent("end_invalidation", numArgs: 2)
+        try decodeEvent("end_invalidation", numArgs: 2, argTypes: [.nodeID])
     }
     
     mutating func decodeBeginModify() throws(E) {
-        try decodeEvent("begin_modify", hasTimestampt: true, numArgs: 1)
+        try decodeEvent("begin_modify", hasTimestampt: true, numArgs: 1, argTypes: [.nodeID])
     }
     
     mutating func decodeEndModify() throws(E) {
-        try decodeEvent("end_modify", hasTimestampt: true, numArgs: 1)
+        try decodeEvent("end_modify", hasTimestampt: true, numArgs: 1, argTypes: [.bool])
     }
     
     mutating func decodeBeginEvent() throws(E) {
@@ -252,63 +354,65 @@ struct TraceDecoder {
     }
     
     mutating func decodeCreatedSubgraph() throws(E) {
-        try decodeEvent("add_child_subgraph", hasTimestampt: false, numArgs: 2)
+        try decodeEvent("create_subgraph", hasTimestampt: false, numArgs: 2, argTypes: [.subgraphID])
     }
     
     mutating func decodeInvalidateSubgraph() throws(E) {
-        try decodeEvent("invalidate_subgraph", hasTimestampt: false, numArgs: 1)
+        try decodeEvent("invalidate_subgraph", hasTimestampt: false, numArgs: 1, argTypes: [.subgraphID])
     }
     
     mutating func decodeAddChildSubgraph() throws(E) {
-        try decodeEvent("add_child_subgraph", hasTimestampt: false, numArgs: 2)
+        try decodeEvent("add_child_subgraph", hasTimestampt: false, numArgs: 2, argTypes: [.subgraphID, .subgraphID])
     }
     
     mutating func decodeRemoveChildSubgraph() throws(E) {
-        try decodeEvent("remove_child_subgraph", hasTimestampt: false, numArgs: 2)
+        try decodeEvent("remove_child_subgraph", hasTimestampt: false, numArgs: 2, argTypes: [.subgraphID, .subgraphID])
     }
     
     mutating func decodeAddedNode() throws(E) {
-        try decodeEvent("added_node", hasTimestampt: false, numArgs: 3)
+        try decodeEvent("added_node", hasTimestampt: false, numArgs: 3, argTypes: [.nodeID, .subgraphID, .typeID])
     }
     
     mutating func decodeSetDirty() throws(E) {
-        try decodeEvent("set_dirty", hasTimestampt: false, numArgs: 2)
+        try decodeEvent("set_dirty", hasTimestampt: false, numArgs: 2, argTypes: [.nodeID, .bool])
     }
     
     mutating func decodeSetPending() throws(E) {
-        try decodeEvent("set_pending", hasTimestampt: false, numArgs: 2)
+        try decodeEvent("set_pending", hasTimestampt: false, numArgs: 2, argTypes: [.nodeID, .bool])
     }
     
     mutating func decodeSetValue() throws(E) {
-        try decodeEvent("set_value", hasTimestampt: false, numArgs: 1)
+        try decodeEvent("set_value", hasTimestampt: false, numArgs: 1, argTypes: [.nodeID])
     }
     
     mutating func decodeMarkValue() throws(E) {
-        try decodeEvent("mark_value", hasTimestampt: false, numArgs: 1)
+        try decodeEvent("mark_value", hasTimestampt: false, numArgs: 1, argTypes: [.nodeID])
     }
     
     mutating func decodeAddedIndirectNode() throws(E) {
-        try decodeEvent("added_indirect_node", hasTimestampt: false, numArgs: 4)
+        try decodeEvent("added_indirect_node", hasTimestampt: false, numArgs: 4, argTypes: [.nodeID, .subgraphID, .nodeID, nil])
     }
     
     mutating func decodeSetSource() throws(E) {
-        try decodeEvent("set_source", hasTimestampt: false, numArgs: 3)
+        // id, source, subgraph
+        try decodeEvent("set_source", hasTimestampt: false, numArgs: 3, argTypes: [.nodeID, .nodeID, .subgraphID])
     }
     
     mutating func decodeSetDependency() throws(E) {
-        try decodeEvent("set_dependency", hasTimestampt: false, numArgs: 2)
+        try decodeEvent("set_dependency", hasTimestampt: false, numArgs: 2, argTypes: [.nodeID, .nodeID])
     }
     
     mutating func decodeAddEdge() throws(E) {
-        try decodeEvent("add_edge", hasTimestampt: false, numArgs: 2)
+        // nodeID and nodeID
+        try decodeEvent("add_edge", hasTimestampt: false, numArgs: 2, argTypes: [.nodeID, .nodeID])
     }
     
     mutating func decodeRemoveEdge() throws(E) {
-        try decodeEvent("remove_edge", hasTimestampt: false, numArgs: 2)
+        try decodeEvent("remove_edge", hasTimestampt: false, numArgs: 2, argTypes: [.nodeID, .nodeID])
     }
     
     mutating func decodeSetEdgePending() throws(E) {
-        try decodeEvent("set_endge_pending", hasTimestampt: false, numArgs: 3)
+        try decodeEvent("set_endge_pending", hasTimestampt: false, numArgs: 3, argTypes: [.nodeID, .nodeID, .bool])
     }
     
     mutating func decodeMarkProfile() throws(E) {
@@ -320,7 +424,7 @@ struct TraceDecoder {
     }
     
     mutating func decodeDestroySubgraph() throws(E) {
-        try decodeEvent("destroy_subgraph", hasTimestampt: false, numArgs: 1)
+        try decodeEvent("destroy_subgraph", hasTimestampt: false, numArgs: 1, argTypes: [.subgraphID])
     }
     
     mutating func decodeNamedEvent() throws(E) {
@@ -335,7 +439,7 @@ struct TraceDecoder {
         skipTillEnd("passed_deadline")
     }
     
-    mutating func decodeEvent(_ name: String, hasTimestampt: Bool = true, numArgs: Int) throws(E) {
+    mutating func decodeEvent(_ name: String, hasTimestampt: Bool = true, numArgs: Int, argTypes: [ArgType?] = []) throws(E) {
         var message = name + ":"
         if hasTimestampt {
             let ts = try decodeFieldTimestamp()
@@ -345,6 +449,16 @@ struct TraceDecoder {
         for i in 0..<numArgs {
             let X = try decodeVarIntIfPresent(tag: 0x18 + 8 * UInt(i))
             message += " \(X, default: "nil")"
+            
+            if let X {
+                let ns: ArgType
+                if i < argTypes.count, let typeName = argTypes[i] {
+                    ns = typeName
+                } else {
+                    ns = .unknown(name + ".\(i)")
+                }
+                nsTracker.add(ns, X)
+            }
         }
         
         _ = try decodeFieldBackTrace(param: 8)
@@ -355,7 +469,10 @@ struct TraceDecoder {
     
     mutating func decodeSubgraph() throws(E) {
         // subgraph->_w18 & 0x7fffffff
-        let x08 = try decodeVarIntIfPresent(tag: 0x08)
+        let subgraphID = try decodeVarIntIfPresent(tag: 0x08)
+        
+        // subgraph->_x28 - graph pointer/id
+        
         // subgraph->_x30
         let x10 = try decodeVarIntIfPresent(tag: 0x10)
         // if (subgraph->_x38 == 0) {
@@ -369,7 +486,7 @@ struct TraceDecoder {
         //     items = b[0..<count]
         // }
         // Skips zeros during encoding
-        let x18 = try decodeArray(tag: 0x18) { (d: inout TraceDecoder) throws(E) in
+        let ancestors = try decodeArray(tag: 0x18) { (d: inout TraceDecoder) throws(E) in
             try d.decodeVarInt()
         }
         // tagged_pointers = subgraph->_x40[0..<subgraph->_w48]
@@ -377,19 +494,23 @@ struct TraceDecoder {
         //    (p & ~3)->w18 & 0x7f_ff_ff_ff
         // }
         // Skips zeros during encoding
-        let x20 = try decodeArray(tag: 0x20) { (d: inout TraceDecoder) throws(E) in
+        let children = try decodeArray(tag: 0x20) { (d: inout TraceDecoder) throws(E) in
             try d.decodeVarInt()
         }
         // item = subgraph->_b68 ? 1 : nil
         let x28: Bool = try decodeBool(tag: 0x28)
         
-        print("subgraph: \(x08, default: "nil"), \(x10, default: "nil"), \(x18), \(x20), \(x28) {")
+        nsTracker.add(.subgraphID, subgraphID)
+        nsTracker.add(.unknown("subgraph.1"), x10)
+        nsTracker.add(.subgraphID, ancestors)
+        nsTracker.add(.subgraphID, children)
+        print("subgraph: id=\(subgraphID, default: "nil"), \(x10, default: "nil"), ancestors=\(ancestors), children=\(children), \(x28) {")
         
         // let w8 = subgraph->_w10
         // ...
         let x32: [()] = try decodeArray(tag: 0x32) { (d: inout TraceDecoder) throws(E) in
             var child = try d.decodeChild()
-            return try child.decodeSubgraphFoo()
+            return try child.decodeSubgraphNode()
         }
         
         // if (subgraph->w60) {
@@ -407,15 +528,17 @@ struct TraceDecoder {
         print("}")
     }
     
-    mutating func decodeSubgraphFoo() throws(E) {
-        let x08 = try decodeVarIntIfPresent(tag: 0x08) ?? 0
+    mutating func decodeSubgraphNode() throws(E) {
+        let nodeID = try decodeVarIntIfPresent(tag: 0x08) ?? 0
+        
+        nsTracker.add(.nodeID, nodeID)
         
         if try decodeTag(0x12) {
-            print("any_node: \(x08) node")
+            print("any_node: id=\(nodeID) node")
             var child = try decodeChild()
             try child.decodeNode()
         } else if try decodeTag(0x1a) {
-            print("any_node: \(x08) indirectNode")
+            print("any_node: id=\(nodeID) indirectNode")
             var child = try decodeChild()
             try child.decodeIndirectNode()
         } else {
@@ -426,8 +549,9 @@ struct TraceDecoder {
     }
 
     mutating func decodeNode() throws(E) {
+        // subgraph id?
         // this->_w00 >> 8
-        let x08: UInt = try decodeVarIntIfPresent(tag: 0x08) ?? 0
+        let typeID: UInt = try decodeVarIntIfPresent(tag: 0x08) ?? 0
         
         // String returned by a function
         // x0 = *(graph->_x58 + ((this->_w00 >> 5) & ~7)
@@ -467,9 +591,9 @@ struct TraceDecoder {
             return (x08, x10, x18, x20, x30, x38)
         }
         
-        let x22: [UInt?] = try decodeArray(tag: 0x22) { (d: inout TraceDecoder) throws (E) -> UInt? in
+        let x22: [UInt?] = try decodeArray(tag: 0x22) { (d: inout TraceDecoder) throws (E) -> UInt in
             var child = try d.decodeChild()
-            return try child.decodeVarIntIfPresent(tag: 0x08)
+            return try child.decodeVarIntIfPresent(tag: 0x08) ?? 0
         }
         
         // this->_w00 & 0x1
@@ -505,14 +629,17 @@ struct TraceDecoder {
         // this->_b07 & 0x40
         let x78: Bool = try decodeBool(tag: 0x78)
         
-        print("node: \(x08), \(x10, default: "nil"), \(x1a), \(x22), \(x28, default: "nil"), \(x30), \(x38), \(x40), \(x48), \(x50), \(x58), \(x60), \(x68), \(x70), \(x78)")
+        nsTracker.add(.typeID, typeID)
+        nsTracker.add(.nodeID, x1a.map(\.0))
+        nsTracker.add(.nodeID, x22.compactMap { $0 })
+        print("node: type=\(typeID), \(x10, default: "nil"), \(x1a), \(x22), \(x28, default: "nil"), \(x30), \(x38), \(x40), \(x48), \(x50), \(x58), \(x60), \(x68), \(x70), \(x78)")
     }
     
     mutating func decodeIndirectNode() throws(E) {
         // this->_w00
-        let x08 = try decodeVarIntIfPresent(tag: 0x08)
+        let source = try decodeVarIntIfPresent(tag: 0x08) ?? 0
         // this->_w04
-        let x10 = try decodeVarIntIfPresent(tag: 0x10)
+        let subgraph = try decodeVarIntIfPresent(tag: 0x10)
         // this->_w08 >> 2
         let x18 = try decodeVarIntIfPresent(tag: 0x18)
         // if ((this->_w0c + 1) & 0xff_ff >= 2) {
@@ -537,14 +664,20 @@ struct TraceDecoder {
         
         try assertAtEnd()
         
-        print("indirectNode: \(x08, default: "nil"), \(x10, default: "nil"), \(x18, default: "nil"), \(x20, default: "nil"), \(x28, default: "nil"), \(x30)")
+        nsTracker.add(.nodeID, source)
+        nsTracker.add(.subgraphID, subgraph)
+        nsTracker.add(.unknown("indirectNode.2"), x18)
+        nsTracker.add(.unknown("indirectNode.3"), x20)
+        nsTracker.add(.nodeID, x28)
+        nsTracker.add(.nodeID, x30.map { $0 ?? 0})
+        print("indirectNode: source=\(source), subgraph=\(subgraph, default: "nil"), \(x18, default: "nil"), \(x20, default: "nil"), \(x28, default: "nil"), \(x30)")
     }
     
     mutating func decodeTree() throws(E) -> Tree {
         // node->_w08 if >= 4
         let x10 = try decodeVarIntIfPresent(tag: 0x10) ?? 0
         // node->_w0c if
-        let x18 = try decodeVarIntIfPresent(tag: 0x18) ?? 0
+        let x18 = try decodeBool(tag: 0x18)
         
         // 32-bit offsets from *AG::data::_shared_table_bytes
         // * child: node->_w14
@@ -556,40 +689,49 @@ struct TraceDecoder {
         
         // * head: node->_w1c
         // * next: item->_w14
-        let x2a = try decodeArray(tag: 0x2a) { (d: inout TraceDecoder) throws (E) -> (UInt, UInt, UInt) in
+        let x2a = try decodeArray(tag: 0x2a) { (d: inout TraceDecoder) throws (E) -> (UInt, UInt, Bool) in
             var child = try d.decodeChild()
             // item->_w08 if >= 4
             let x10 = try child.decodeVarIntIfPresent(tag: 0x10) ?? 0
             // item->_w0c
-            let x18 = try child.decodeVarIntIfPresent(tag: 0x18) ?? 0
+            let key = try child.decodeVarIntIfPresent(tag: 0x18) ?? 0
             // item->_w10
-            let x20 = try child.decodeVarIntIfPresent(tag: 0x20) ?? 0
+            let x20 = try child.decodeBool(tag: 0x20)
             
-            return (x10, x18, x20)
+            return (x10, key, x20)
         }
         
         let x30 = try decodeArray(tag: 0x30) { (d: inout TraceDecoder) throws (E) -> UInt in
             return try d.decodeVarInt()
         }
         
+        nsTracker.add(.nodeID, x10)
+        nsTracker.add(.nodeID, x2a.map(\.0)) //
+        nsTracker.add(.keyID, x2a.map(\.1)) // key.0
+        nsTracker.add(.nodeID, x30)
         return Tree(x10: x10, x18: x18, children: children, x2a: x2a, x30: x30)
     }
     
     mutating func decodeType() throws(E) {
-        let a = try decodeVarIntIfPresent(tag: 0x08)
+        let typeID = try decodeVarIntIfPresent(tag: 0x08) ?? 0
+        nsTracker.add(.typeID, typeID)
         let b = try decodeStringIfPresent(tag: 0x12)
         let c = try decodeStringIfPresent(tag: 0x1a)
         let d = try decodeVarIntIfPresent(tag: 0x20)
+        nsTracker.add(.unknown("type.3"), d)
         let e = try decodeVarIntIfPresent(tag: 0x28)
+        nsTracker.add(.unknown("type.4"), e)
         let f = try decodeVarIntIfPresent(tag: 0x30)
-        print("type: \(a, default: "nil"), \(b, default: "nil"), \(c, default: "nil"), \(d, default: "nil"), \(e, default: "nil"), \(f, default: "nil")")
+        nsTracker.add(.unknown("type.5"), f)
+        print("type: \(typeID), \(b, default: "nil"), \(c, default: "nil"), \(d, default: "nil"), \(e, default: "nil"), \(f, default: "nil")")
     }
     
     mutating func decodeKey() throws(E) {
         let x = try decodeVarIntIfPresent(tag: 0x8) ?? 0
+        nsTracker.add(.keyID, x)
         let y = try decodeStringIfPresent(tag: 0x12)
         try assertAtEnd()
-        print("key: \(x, default: "nil") \(y, default: "nil")")
+        print("key: \(x) \(y, default: "nil")")
     }
         
     mutating func decodeFieldTimestamp() throws(E) -> Date {
@@ -750,7 +892,7 @@ struct TraceDecoder {
     
     private mutating func decodeChild() throws(E) -> TraceDecoder {
         let data = try decodeLengthDelimited()
-        return TraceDecoder(data: data)
+        return TraceDecoder(data: data, nsTracker: self.nsTracker)
     }
         
     private func mappingError<T>( _ block: () throws(DecoderError) -> T) throws(E) -> T {

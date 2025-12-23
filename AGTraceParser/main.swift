@@ -10,8 +10,9 @@ import Foundation
 func main()  {
     do {
         let data = try Data(contentsOf: URL(filePath: CommandLine.arguments[1]))
-        var traceDecoder = TraceDecoder(data: data)
+        var traceDecoder = TraceDecoder(data: data, nsTracker: nil)
         try traceDecoder.decodeAll()
+        traceDecoder.nsTracker.analyze()
     } catch {
         print(error)
     }
