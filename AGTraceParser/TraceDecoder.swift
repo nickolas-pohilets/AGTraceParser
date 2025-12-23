@@ -55,8 +55,14 @@ struct Tree {
     let x10: UInt
     let x18: Bool
     var children: [Tree]
-    var x2a: [(UInt, UInt, Bool)]
-    var x30: [UInt]
+    var values: [TreeValue]
+    var nodes: [UInt]
+}
+
+struct TreeValue {
+    var value: UInt
+    var key: UInt
+    var flags: UInt
 }
 
 extension Set<UInt> {
@@ -549,7 +555,6 @@ struct TraceDecoder {
     }
 
     mutating func decodeNode() throws(E) {
-        // subgraph id?
         // this->_w00 >> 8
         let typeID: UInt = try decodeVarIntIfPresent(tag: 0x08) ?? 0
         
@@ -679,6 +684,7 @@ struct TraceDecoder {
         // node->_w0c if
         let x18 = try decodeBool(tag: 0x18)
         
+        // Used by AGTreeElementGetNextChild2()
         // 32-bit offsets from *AG::data::_shared_table_bytes
         // * child: node->_w14
         // * next: node->_w18
@@ -687,29 +693,45 @@ struct TraceDecoder {
             return try child.decodeTree()
         }
         
+        // Used by AGTreeElementMakeValueIterator()
         // * head: node->_w1c
         // * next: item->_w14
-        let x2a = try decodeArray(tag: 0x2a) { (d: inout TraceDecoder) throws (E) -> (UInt, UInt, Bool) in
+        let values = try decodeArray(tag: 0x2a) { (d: inout TraceDecoder) throws (E) -> TreeValue in
             var child = try d.decodeChild()
-            // item->_w08 if >= 4
-            let x10 = try child.decodeVarIntIfPresent(tag: 0x10) ?? 0
-            // item->_w0c
-            let key = try child.decodeVarIntIfPresent(tag: 0x18) ?? 0
-            // item->_w10
-            let x20 = try child.decodeBool(tag: 0x20)
-            
-            return (x10, key, x20)
+            return try child.decodeTreeValue()
         }
         
-        let x30 = try decodeArray(tag: 0x30) { (d: inout TraceDecoder) throws (E) -> UInt in
+        // based on node->_x118
+        let nodes = try decodeArray(tag: 0x30) { (d: inout TraceDecoder) throws (E) -> UInt in
             return try d.decodeVarInt()
         }
         
+        // _x00 - type
+        // _w08 - value
+        // _w0c - flags
+        // _w10 - parent
+        // _w14 - child
+        // _w18 - ???
+        // _w1c - head of linked list of values
+        //
+        
         nsTracker.add(.nodeID, x10)
-        nsTracker.add(.nodeID, x2a.map(\.0)) //
-        nsTracker.add(.keyID, x2a.map(\.1)) // key.0
-        nsTracker.add(.nodeID, x30)
-        return Tree(x10: x10, x18: x18, children: children, x2a: x2a, x30: x30)
+        nsTracker.add(.unknown("tree.values.value"), values.map(\.value))
+        nsTracker.add(.keyID, values.map(\.key)) // key.0
+        nsTracker.add(.nodeID, nodes)
+        return Tree(x10: x10, x18: x18, children: children, values: values, nodes: nodes)
+    }
+    
+    mutating func decodeTreeValue() throws (E) -> TreeValue {
+        // item->_w08 if >= 4
+        let value = try self.decodeVarIntIfPresent(tag: 0x10) ?? 0
+        // AGTreeValueGetKey calls AG::Graph::key_name(unsigned int) const to convert it to name
+        // item->_w0c
+        let key = try self.decodeVarIntIfPresent(tag: 0x18) ?? 0
+        // item->_w10
+        let flags = try self.decodeVarIntIfPresent(tag: 0x20) ?? 0
+        
+        return TreeValue(value: value, key: key, flags: flags)
     }
     
     mutating func decodeType() throws(E) {
